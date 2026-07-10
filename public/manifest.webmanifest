@@ -1,0 +1,17 @@
+{
+  "name": "AURA Health Deck",
+  "short_name": "AURA Health",
+  "description": "Local-first calorie, water and workout tracking with a futuristic dashboard.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05070f",
+  "theme_color": "#05070f",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
