@@ -2,7 +2,6 @@ import { useSync, type SyncStatus } from '../../state/SyncProvider';
 
 const META: Record<SyncStatus, { color: string; label: string }> = {
   'local-only': { color: '#8b97ad', label: 'Local only' },
-  'signed-out': { color: '#fbbf24', label: 'Sign in to sync' },
   offline: { color: '#fb7185', label: 'Offline' },
   syncing: { color: '#22d3ee', label: 'Syncing…' },
   synced: { color: '#a3e635', label: 'Synced' },

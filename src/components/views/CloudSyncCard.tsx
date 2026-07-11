@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSync } from '../../state/SyncProvider';
-import { loadConfig } from '../../lib/supabase';
+import { loadSyncConfig } from '../../lib/syncBackend';
 import { SyncBadge } from '../ui/SyncBadge';
 
 function timeAgo(ts: number | null): string {
@@ -12,25 +12,21 @@ function timeAgo(ts: number | null): string {
   return `${Math.round(s / 3600)}h ago`;
 }
 
-/** Configure Supabase, sign in, and see sync status. Optional — skip it for local-only use. */
+const isDesktop = typeof location !== 'undefined' && location.protocol === 'file:';
+
+/** Connect the device to cloud sync with a sync password. Optional — skip for local-only use. */
 export function CloudSyncCard() {
   const sync = useSync();
-  const existing = loadConfig();
+  const existing = loadSyncConfig();
 
-  const [url, setUrl] = useState(existing?.url ?? '');
-  const [anonKey, setAnonKey] = useState(existing?.anonKey ?? '');
-  const [email, setEmail] = useState(sync.email ?? '');
+  // On the hosted PWA the API is same-origin, so the URL field defaults to blank.
+  const [apiBaseUrl, setApiBaseUrl] = useState(existing?.apiBaseUrl ?? '');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
 
-  const saveConfig = () => {
-    if (!url.trim() || !anonKey.trim()) return;
-    sync.saveSupabaseConfig({ url: url.trim(), anonKey: anonKey.trim() });
-  };
-
-  const run = (fn: () => Promise<void>) => async () => {
-    setBusy(true);
-    try { await fn(); } catch { /* surfaced via sync.errorMessage */ } finally { setBusy(false); }
+  const connect = () => {
+    if (!password.trim()) return;
+    sync.saveConfig({ apiBaseUrl: apiBaseUrl.trim(), password: password.trim() });
+    setPassword('');
   };
 
   return (
@@ -43,53 +39,35 @@ export function CloudSyncCard() {
       {!sync.configured ? (
         <>
           <p className="small muted" style={{ marginTop: 0 }}>
-            Connect your own free <strong>Supabase</strong> project to share data with your phone (and the
-            installable web app). Create a project at supabase.com, run the setup SQL from
-            <span className="mono"> supabase/schema.sql</span>, then paste its URL and anon key below.
+            Sync your days, meals and workouts across devices through your own Vercel deployment —
+            no third-party database account. Set up the sync store once (see
+            <span className="mono"> README → Cloud sync</span>), then enter your sync password below.
             Leave this blank to keep AURA fully local.
           </p>
           <div className="grid" style={{ gap: 10 }}>
+            {isDesktop && (
+              <div className="field">
+                <span className="field-label">Sync URL (your deployed app)</span>
+                <input
+                  className="input mono" value={apiBaseUrl}
+                  onChange={(e) => setApiBaseUrl(e.target.value)}
+                  placeholder="https://aura-health-omega.vercel.app"
+                />
+              </div>
+            )}
             <div className="field">
-              <span className="field-label">Project URL</span>
-              <input className="input mono" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://xxxxxxxx.supabase.co" />
-            </div>
-            <div className="field">
-              <span className="field-label">Anon / public key</span>
-              <input className="input mono" value={anonKey} onChange={(e) => setAnonKey(e.target.value)} placeholder="eyJhbGciOi…" />
+              <span className="field-label">Sync password</span>
+              <input
+                className="input" type="password" value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="the password you set on the server"
+                onKeyDown={(e) => { if (e.key === 'Enter') connect(); }}
+              />
             </div>
             <div className="row">
               <div className="spacer" />
-              <button className="btn btn-primary" disabled={!url.trim() || !anonKey.trim()} onClick={saveConfig}>
-                Connect project
-              </button>
-            </div>
-          </div>
-        </>
-      ) : !sync.email ? (
-        <>
-          <p className="small muted" style={{ marginTop: 0 }}>
-            Project connected. Sign in with the same account on every device to sync. New here?
-            Create an account, then use it on your phone too.
-          </p>
-          <div className="grid" style={{ gap: 10 }}>
-            <div className="field">
-              <span className="field-label">Email</span>
-              <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-            </div>
-            <div className="field">
-              <span className="field-label">Password</span>
-              <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-            </div>
-            <div className="row wrap">
-              <button className="btn btn-primary" disabled={busy || !email || !password} onClick={run(() => sync.signIn(email, password))}>
-                Sign in
-              </button>
-              <button className="btn" disabled={busy || !email || !password} onClick={run(() => sync.signUp(email, password))}>
-                Create account
-              </button>
-              <div className="spacer" />
-              <button className="btn btn-sm" disabled={busy} onClick={run(sync.disconnect)}>
-                Change project
+              <button className="btn btn-primary" disabled={!password.trim()} onClick={connect}>
+                Connect
               </button>
             </div>
           </div>
@@ -98,8 +76,8 @@ export function CloudSyncCard() {
         <>
           <div className="row-between" style={{ marginBottom: 12 }}>
             <div className="stat">
-              <span className="stat-label">Signed in</span>
-              <span style={{ fontWeight: 600 }}>{sync.email}</span>
+              <span className="stat-label">Connected to</span>
+              <span style={{ fontWeight: 600 }}>{sync.apiHost}</span>
             </div>
             <div className="stat" style={{ alignItems: 'flex-end' }}>
               <span className="stat-label">Last synced</span>
@@ -107,21 +85,17 @@ export function CloudSyncCard() {
             </div>
           </div>
           <p className="small muted" style={{ marginTop: 0 }}>
-            Every change syncs automatically. Open the installable web app on your phone, sign in with this
-            same account, and your days, meals and workouts appear there too.
+            Every change syncs automatically. Open the installable web app on your phone, enter this
+            same sync password, and your data appears there too.
           </p>
           <div className="row wrap">
-            <button className="btn btn-primary" disabled={busy} onClick={run(sync.syncNow)}>Sync now</button>
-            <button className="btn" disabled={busy} onClick={run(sync.signOut)}>Sign out</button>
+            <button className="btn btn-primary" onClick={() => { void sync.syncNow(); }}>Sync now</button>
             <div className="spacer" />
-            <button className="btn btn-sm" disabled={busy} onClick={run(sync.disconnect)}>Disconnect project</button>
+            <button className="btn btn-sm" onClick={sync.disconnect}>Disconnect</button>
           </div>
         </>
       )}
 
-      {sync.notice && (
-        <p className="small" style={{ color: 'var(--amber)', marginBottom: 0 }}>{sync.notice}</p>
-      )}
       {sync.errorMessage && (
         <p className="small" style={{ color: 'var(--red)', marginBottom: 0 }}>{sync.errorMessage}</p>
       )}

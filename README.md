@@ -44,56 +44,57 @@ Notes:
 ## Phone (Android) + cloud sync
 
 AURA can run on your Android phone as an **installable web app (PWA)** that shares data with
-your PC through **your own free Supabase project**. Editing works on both — each day, meal
+your PC. Sync goes through a **single serverless function on your own Vercel deployment**
+([api/sync.js](api/sync.js)) backed by a Redis/KV store — no third-party database account,
+and no secret ever lives on your phone (devices send only a *sync password*). Each day, meal
 template, and your settings sync independently, so logging on your phone and your PC at the
 same time doesn't clobber anything (newest edit of each record wins).
 
-### 1 — Create the Supabase project (once)
+### 1 — Deploy the app to Vercel (once)
 
-1. Sign up at [supabase.com](https://supabase.com) and create a free project.
-2. Open **SQL Editor → New query**, paste the contents of
-   [supabase/schema.sql](supabase/schema.sql), and run it. This creates the `aura_records`
-   table, locks it to each signed-in user (row-level security), and turns on realtime.
-3. (Recommended for a frictionless login) **Authentication → Sign In / Providers → Email**:
-   turn **off** "Confirm email" so email + password works without a confirmation click.
-4. In **Project Settings → API**, copy the **Project URL** and the **anon / public** key.
-
-### 2 — Connect each device
-
-In **Settings → Cloud sync · phone access**: paste the URL + anon key, click **Connect
-project**, then **Create account** (first device) or **Sign in** (every other device) with
-the *same* email and password. The sidebar badge shows the live status
-(Local only / Syncing / Synced / Offline).
-
-### 3 — Put it on the phone
-
-The phone loads the app from a URL, so host the web build on any static HTTPS host
-(install-to-home-screen requires HTTPS; `localhost` is the only HTTP exception):
+The repo is set up for Vercel: [vercel.json](vercel.json) runs `npm run build:web` (static
+PWA into `dist/`) and exposes `api/sync.js` as a function.
 
 ```
-npm run build:web        # outputs dist/ with manifest + service worker
+npx vercel deploy --prod          # from the project root; links/creates the Vercel project
 ```
 
-Deploy `dist/` to a free host — e.g. drag the folder onto [Netlify Drop](https://app.netlify.com/drop),
-or `vercel deploy dist`, or GitHub Pages. Then on the phone:
+or connect the GitHub repo in the Vercel dashboard for automatic deploys on every push.
 
-1. Open the deployed URL in **Chrome on Android**.
-2. Menu **⋮ → Install app** (or "Add to Home screen"). You get an AURA icon that opens
-   full-screen and works offline.
-3. Open it, go to **Settings → Cloud sync**, enter the same Supabase URL/key, and sign in.
+### 2 — Add the sync store + password (once, in the Vercel dashboard)
 
-Your PC (desktop app *or* the same hosted URL) and your phone now share one dataset.
+1. **Storage → Create Database → Redis** (Upstash) → connect it to this project. Vercel
+   injects `KV_REST_API_URL` / `KV_REST_API_TOKEN` automatically. (Free tier is plenty for a
+   small JSON document.)
+2. **Settings → Environment Variables →** add `SYNC_PASSWORD` = a password you choose.
+3. **Redeploy** so the new env vars take effect (`npx vercel deploy --prod`, or click
+   Redeploy in the dashboard).
+
+That's the whole backend. The function refuses any request without the right `SYNC_PASSWORD`,
+and the Redis token stays server-side.
+
+### 3 — Connect your devices
+
+- **Hosted app / phone:** open your Vercel URL in **Chrome on Android → ⋮ → Install app** for
+  a full-screen, offline-capable icon. Then **Settings → Cloud sync**, enter your sync
+  password, **Connect**. (The API is same-origin, so there's no URL to type.)
+- **Desktop app:** in **Settings → Cloud sync**, enter your deployed URL *and* the sync
+  password. The sidebar badge shows the live status (Local only / Syncing / Synced / Offline).
+
+Every device that knows the password shares one dataset.
 
 ### How sync works / privacy
 
-- Data lives in **your** Supabase project; row-level security means only your signed-in
-  account can read it. The anon key is safe to ship in the client (that's its purpose).
-- Local-first: every device keeps a full local copy and works offline; changes queue and
-  push when back online. The service worker caches the app shell so it opens without network.
-- Conflict model and merge logic live in [src/lib/sync.ts](src/lib/sync.ts) and are covered
-  by [src/lib/sync.test.ts](src/lib/sync.test.ts) (`npm test`). Sync is per-record
-  last-write-wins; deletes use tombstones so a removed meal can't be resurrected by a stale
-  device.
+- Data lives in **your** Vercel project's Redis store; the endpoint is gated by your
+  `SYNC_PASSWORD` and the store's token never leaves the server. The password is the only
+  secret on a device (kept in `localStorage`), and it grants access to just this app's data.
+- Local-first: every device keeps a full local copy and works offline; changes queue and push
+  when back online (polling every 30s + on focus). The service worker caches the app shell so
+  it opens without network.
+- The merge logic is per-record last-write-wins with delete tombstones. The **client** side
+  lives in [src/lib/sync.ts](src/lib/sync.ts) (tested in `src/lib/sync.test.ts`); the
+  **server** merge + password gate lives in [api/sync.js](api/sync.js) (tested in
+  `api/sync.test.js`). Run both suites with `npm test`.
 - The portable JSON export/import still works as an offline alternative or extra backup.
 
 ## Features
