@@ -82,7 +82,7 @@ export function CalendarView() {
               >
                 <span className="cal-num">{Number(key.slice(8))}</span>
                 {t ? (
-                  <span className="cal-kcal">{Math.round(t.calories)} kcal</span>
+                  <span className="cal-kcal">{Math.round(t.calories)}<span className="cal-unit"> kcal</span></span>
                 ) : status === 'missed' ? (
                   <span className="cal-kcal" style={{ color: 'var(--red)' }}>missed</span>
                 ) : (
