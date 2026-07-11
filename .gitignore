@@ -33,3 +33,5 @@ node_modules/.tmp/
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

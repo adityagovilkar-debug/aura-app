@@ -1,0 +1,6 @@
+# Vercel rebuilds from source — never upload these (they also blow the 100MB/file limit)
+node_modules
+dist
+release
+.git
+*.log
