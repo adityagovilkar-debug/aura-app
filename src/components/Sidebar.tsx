@@ -7,13 +7,14 @@ import {
 } from './ui/icons';
 import { SyncBadge } from './ui/SyncBadge';
 
-const NAV: { view: View; label: string; icon: () => React.ReactElement }[] = [
-  { view: 'dashboard', label: 'Dashboard', icon: () => <IconDashboard /> },
-  { view: 'log', label: 'Daily log', icon: () => <IconLog /> },
-  { view: 'calendar', label: 'Calendar', icon: () => <IconCalendar size={18} /> },
-  { view: 'library', label: 'Meal library', icon: () => <IconLibrary /> },
-  { view: 'reports', label: 'Reports', icon: () => <IconReports /> },
-  { view: 'settings', label: 'Settings', icon: () => <IconSettings /> },
+// `short` labels are used by the mobile bottom bar, where space is tight.
+const NAV: { view: View; label: string; short: string; icon: () => React.ReactElement }[] = [
+  { view: 'dashboard', label: 'Dashboard', short: 'Home', icon: () => <IconDashboard /> },
+  { view: 'log', label: 'Daily log', short: 'Log', icon: () => <IconLog /> },
+  { view: 'calendar', label: 'Calendar', short: 'Calendar', icon: () => <IconCalendar size={18} /> },
+  { view: 'library', label: 'Meal library', short: 'Meals', icon: () => <IconLibrary /> },
+  { view: 'reports', label: 'Reports', short: 'Reports', icon: () => <IconReports /> },
+  { view: 'settings', label: 'Settings', short: 'Settings', icon: () => <IconSettings /> },
 ];
 
 export function Sidebar() {
@@ -42,7 +43,8 @@ export function Sidebar() {
             onClick={() => setView(item.view)}
           >
             {item.icon()}
-            <span>{item.label}</span>
+            <span className="nav-full">{item.label}</span>
+            <span className="nav-short">{item.short}</span>
           </button>
         ))}
       </nav>
