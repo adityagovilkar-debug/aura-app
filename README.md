@@ -83,6 +83,21 @@ and the Redis token stays server-side.
 
 Every device that knows the password shares one dataset.
 
+### Multiple people (separate data)
+
+More than one person can use the same deployment with **completely separate data** — each
+just gets their own password:
+
+1. In the Vercel dashboard, add another environment variable **`SYNC_PASSWORD_2`** = a second
+   password (and `SYNC_PASSWORD_3`, … up to `_10`, for more people). **Redeploy** so it takes
+   effect.
+2. That person opens the same app and enters *their* password in **Settings → Cloud sync**.
+
+Each password maps to its own storage, so nobody sees anyone else's meals or workouts. Your
+original `SYNC_PASSWORD` keeps its existing data untouched — adding others changes nothing for
+you. (If two people ever share one physical device, use separate browser profiles, since the
+local copy lives in the browser.)
+
 ### How sync works / privacy
 
 - Data lives in **your** Vercel project's Redis store; the endpoint is gated by your

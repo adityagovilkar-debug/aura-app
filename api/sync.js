@@ -1,15 +1,16 @@
 // AURA cloud sync — a single Vercel serverless function.
 //
-// It stores one JSON document (a flat list of sync records, see src/lib/sync.ts)
-// in Redis, and is gated by a shared password so only you can read/write it.
-// The Redis token stays here on the server — devices only ever send the password.
+// It stores each person's data (a flat list of sync records, see src/lib/sync.ts)
+// under its own Redis key, gated by that person's password. Redis tokens stay
+// here on the server — devices only ever send a password.
 //
 // Required environment variables (set in the Vercel project):
-//   SYNC_PASSWORD                             — the password each device enters
+//   SYNC_PASSWORD                             — your password (primary account)
+//   SYNC_PASSWORD_2 .. SYNC_PASSWORD_10       — optional: more people, separate data
 //   KV_REST_API_URL      / KV_REST_API_TOKEN  — injected by Vercel's Redis/KV store
 //   (or UPSTASH_REDIS_REST_URL / _TOKEN)      — the Upstash equivalents also work
 
-const REDIS_KEY = 'aura:records';
+const PRIMARY_KEY = 'aura:records';
 
 /** Merge two record sets, keeping the newest (by updatedAt) for each kind+key. */
 export function mergeSets(stored, incoming) {
@@ -23,14 +24,32 @@ export function mergeSets(stored, incoming) {
   return [...map.values()];
 }
 
+/**
+ * The allowed accounts: each a { password, key } pair with its own dataset.
+ * SYNC_PASSWORD keeps the original key so existing data is preserved; each
+ * SYNC_PASSWORD_N gets a separate key, so family members never see each other's data.
+ */
+export function accounts(env) {
+  const list = [];
+  if (env.SYNC_PASSWORD) list.push({ password: env.SYNC_PASSWORD, key: PRIMARY_KEY });
+  for (let i = 2; i <= 10; i++) {
+    const password = env[`SYNC_PASSWORD_${i}`];
+    if (password) list.push({ password, key: `${PRIMARY_KEY}:${i}` });
+  }
+  return list;
+}
+
 /** Pure request logic, decoupled from Redis/HTTP so it can be unit-tested. */
-export async function handleSync({ method, password, body, store, env }) {
-  if (!env.SYNC_PASSWORD) {
+export async function handleSync({ method, password, body, env, openStore }) {
+  const list = accounts(env);
+  if (list.length === 0) {
     return { status: 500, body: { error: 'Server not configured: SYNC_PASSWORD is missing.' } };
   }
-  if (!password || password !== env.SYNC_PASSWORD) {
+  const account = password ? list.find((a) => a.password === password) : null;
+  if (!account) {
     return { status: 401, body: { error: 'Wrong sync password.' } };
   }
+  const store = openStore(account.key);
   if (method === 'GET') {
     return { status: 200, body: { records: await store.get() } };
   }
@@ -43,23 +62,23 @@ export async function handleSync({ method, password, body, store, env }) {
   return { status: 405, body: { error: 'Method not allowed.' } };
 }
 
-function redisStore(env) {
+function redisStore(env, key) {
   const url = env.KV_REST_API_URL || env.UPSTASH_REDIS_REST_URL;
   const token = env.KV_REST_API_TOKEN || env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     throw new Error('Server not configured: no Redis/KV store is connected to this project.');
   }
-  const key = encodeURIComponent(REDIS_KEY);
+  const k = encodeURIComponent(key);
   const auth = { Authorization: `Bearer ${token}` };
   return {
     async get() {
-      const r = await fetch(`${url}/get/${key}`, { headers: auth });
+      const r = await fetch(`${url}/get/${k}`, { headers: auth });
       if (!r.ok) throw new Error(`Redis GET failed (${r.status}).`);
       const { result } = await r.json();
       return result ? JSON.parse(result) : [];
     },
     async set(records) {
-      const r = await fetch(`${url}/set/${key}`, { method: 'POST', headers: auth, body: JSON.stringify(records) });
+      const r = await fetch(`${url}/set/${k}`, { method: 'POST', headers: auth, body: JSON.stringify(records) });
       if (!r.ok) throw new Error(`Redis SET failed (${r.status}).`);
     },
   };
@@ -80,8 +99,8 @@ export default async function handler(req, res) {
       method: req.method,
       password: req.headers['x-sync-password'],
       body,
-      store: redisStore(process.env),
       env: process.env,
+      openStore: (key) => redisStore(process.env, key),
     });
     res.status(result.status).json(result.body);
   } catch (e) {
